@@ -1,0 +1,24 @@
+{
+	"compilerOptions": {
+		"target": "es5",
+		"module": "commonjs",
+		"strict": true,
+		"esModuleInterop": true,
+		"outDir": "dist",
+		"resolveJsonModule": true,
+		"noImplicitAny": true,
+		"noImplicitReturns": true
+	},
+	"include": [
+		"deploy",
+		"./test",
+		"deploy-stop/01-deploy-carbon-mumbai.ts",
+		"models/02-deploy-faucet.ts",
+		"models/03-deploy-uniandinos-nft.ts",
+		"models/04-deploy-marketplace.ts",
+		"models/01-deploy-uni.ts",
+		"scripts/02-test-evaluator-workflow.ts"
+	],
+	"exclude": ["node_modules"],
+	"files": ["./hardhat.config.ts"]
+}
