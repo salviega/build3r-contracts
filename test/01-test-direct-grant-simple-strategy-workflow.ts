@@ -1,7 +1,13 @@
 import { ethers, upgrades } from 'hardhat'
 import { assert, expect } from 'chai'
 import { moveTime } from '../utils/move-time'
-import { BaseContract, Contract, ContractFactory, ZeroAddress } from 'ethers'
+import {
+	BaseContract,
+	BytesLike,
+	Contract,
+	ContractFactory,
+	ZeroAddress
+} from 'ethers'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
 
 interface Accounts {
@@ -18,49 +24,23 @@ interface Contracts {
 	directGrantsSimpleStrategyContract: any
 }
 
+interface Metadata {
+	protocol: BigInt
+	pointer: string
+}
+
+interface Profile {
+	id: string
+	nonce: BigInt
+	name: string
+	metadata: Metadata
+	owner: string
+	anchor: string
+}
+
 describe('Allo Flow', async function () {
 	let accounts: Accounts
 	let contracts: Contracts
-
-	let numberProject: number
-	let length: number = 0
-
-	let users
-
-	let allProjects
-	let allProjectsByOngoing
-	let allProjectByFailed
-	let allProjectBySucceeded
-	let allProjectByUser
-	let allProjectByUserOngoing
-	let allProjectByUserFailed
-	let allProjectByUserSucceeded
-
-	let allProjectsLength
-	let allProjectsByOngoingLength
-	let allProjectByFailedLength
-	let allProjectBySucceededLength
-	let allProjectByUserLength
-	let allProjectByUserOngoingLength
-	let allProjectByUserFailedLength
-	let allProjectByUserSucceededLength
-
-	let amount = ethers.parseEther('10')
-
-	let planning = new Date('2023-11-28T12:00:00Z')
-	let planningTimestamp = Math.floor(planning.getTime() / 1000)
-
-	let projectTimeStart = new Date('2023-11-29T12:00:00Z')
-	let projectTimeStartTimestamp = Math.floor(projectTimeStart.getTime() / 1000)
-
-	let projectTimeEnd = new Date('2023-11-30T12:00:00Z')
-	let projectTimeEndTimestamp = Math.floor(projectTimeEnd.getTime() / 1000)
-
-	let projectTime = [projectTimeStartTimestamp, projectTimeEndTimestamp]
-
-	let info = 'info'
-
-	let createProjectArgs: any = [amount, planningTimestamp, projectTime, info]
 
 	beforeEach(async function () {
 		const signers = await ethers.getSigners()
@@ -74,140 +54,59 @@ describe('Allo Flow', async function () {
 		}
 
 		contracts = await deployContracts()
-
-		const { admin } = accounts
-		const {
-			registryInstance,
-			alloInstance,
-			directGrantsSimpleStrategyContract
-		} = contracts
 	})
 
-	it.skip('Should get projects emptly', async () => {
+	it('Should create a profile', async () => {
 		// Arrange
-		const { user1 } = accounts
-		const { natureLink } = contracts
+		const { alice } = accounts
+		const { registryInstance } = contracts
 
-		numberProject = 0
+		const aliceNonce: number = await ethers.provider.getTransactionCount(
+			alice.address
+		)
+		const aliceName: string = 'alice'
+		const aliceMetadata: Metadata = {
+			protocol: BigInt(1),
+			pointer: 'ipfs://QmQmQmQmQmQmQmQmQmQmQmQmQm'
+		}
+		const aliceProfileMembers: string[] = []
 
-		allProjects = await natureLink.getAllProjects()
-		allProjectsByOngoing = await natureLink.getAllProjectsByStatus(0)
-		allProjectByFailed = await natureLink.getAllProjectsByStatus(1)
-		allProjectBySucceeded = await natureLink.getAllProjectsByStatus(2)
-		allProjectByUser = await natureLink.getAllProjectsByUser(user1.address)
-		allProjectByUserOngoing = await natureLink.getAllProjectsByUserStatus(
-			user1.address,
-			0
-		)
-		allProjectByUserFailed = await natureLink.getAllProjectsByUserStatus(
-			user1.address,
-			1
-		)
-		allProjectByUserSucceeded = await natureLink.getAllProjectsByUserStatus(
-			user1.address,
-			2
-		)
+		let aliceProfileId: BytesLike
+		let aliceProfileDto: any
+		let aliceProfile: Profile
 
 		// Act
-		allProjectsLength = allProjects.length
-		allProjectsByOngoingLength = allProjectsByOngoing.length
-		allProjectByFailedLength = allProjectByFailed.length
-		allProjectBySucceededLength = allProjectBySucceeded.length
-		allProjectByUserLength = allProjectByUser.length
-		allProjectByUserOngoingLength = allProjectByUserOngoing.length
-		allProjectByUserFailedLength = allProjectByUserFailed.length
-		allProjectByUserSucceededLength = allProjectByUserSucceeded.length
+		const createProfileTx = await registryInstance.createProfile(
+			aliceNonce, // _nonce
+			aliceName, // _name
+			[aliceMetadata.protocol, aliceMetadata.pointer], // _metadata
+			alice.address, // ownerAddress
+			aliceProfileMembers // _membersAddresses
+		)
 
-		// Assert
-		console.log('\n')
-		console.log('🏷️  There should be no projects')
+		await createProfileTx.wait()
 
-		try {
-			assert.equal(allProjectsLength, numberProject)
-			console.log('✅ allProjectsLength should be 0')
-		} catch (e) {
-			console.log(
-				'❌ allProjectsLength should be 0 but was ' + allProjectsLength
-			)
-		}
+		const events = await registryInstance.queryFilter(
+			'ProfileCreated',
+			createProfileTx.blockHash
+		)
 
-		try {
-			assert.equal(allProjectsByOngoingLength, numberProject)
-			console.log('✅ allProjectsByOngoingLength should be 0')
-		} catch (e) {
-			console.log(
-				'❌ allProjectsByOngoingLength should be 0 but was ' +
-					allProjectsByOngoingLength
-			)
-		}
+		const event = events[events.length - 1]
 
-		try {
-			assert.equal(allProjectByFailedLength, numberProject)
-			console.log('✅ allProjectByFailedLength should be 0')
-		} catch (e) {
-			console.log(
-				'❌ allProjectByFailedLength should be 0 but was ' +
-					allProjectByFailedLength
-			)
-		}
+		aliceProfileId = event.args.profileId
 
-		try {
-			assert.equal(allProjectBySucceededLength, numberProject)
-			console.log('✅ allProjectBySucceededLength should be 0')
-		} catch (e) {
-			console.log(
-				'❌ allProjectBySucceededLength should be 0 but was ' +
-					allProjectBySucceededLength
-			)
-		}
+		aliceProfileDto = await registryInstance.getProfileById(aliceProfileId)
 
-		try {
-			assert.equal(allProjectByUserLength, numberProject)
-			console.log('✅ allProjectByUserLength should be 0')
-		} catch (e) {
-			console.log(
-				'❌ allProjectByUserLength should be 0 but was ' +
-					allProjectByUserLength
-			)
-		}
-
-		try {
-			assert.equal(allProjectByUserOngoingLength, numberProject)
-			console.log('✅ allProjectByUserOngoingLength should be 0')
-		} catch (e) {
-			console.log(
-				'❌ allProjectByUserOngoingLength should be 0 but was ' +
-					allProjectByUserOngoingLength
-			)
-		}
-
-		try {
-			assert.equal(allProjectByUserFailedLength, numberProject)
-			console.log('✅ allProjectByUserFailedLength should be 0')
-		} catch (e) {
-			console.log(
-				'❌ allProjectByUserFailedLength should be 0 but was ' +
-					allProjectByUserFailedLength
-			)
-		}
-
-		try {
-			assert.equal(allProjectByUserSucceededLength, numberProject)
-			console.log('✅ allProjectByUserSucceededLength should be 0')
-		} catch (e) {
-			console.log(
-				'❌ allProjectByUserSucceededLength should be 0 but was ' +
-					allProjectByUserSucceededLength
-			)
-		}
-
-		try {
-			await expect(
-				natureLink.getProjectByUser(user1.address, numberProject)
-			).to.be.revertedWith('getProjectByUser: User has no projects')
-			console.log('✅ getProjectByUser should be reverted')
-		} catch (e) {
-			console.log('❌ getProjectByUser should be reverted but was ' + e)
+		aliceProfile = {
+			id: aliceProfileDto[0],
+			nonce: aliceProfileDto[1],
+			name: aliceProfileDto[2],
+			metadata: {
+				protocol: aliceProfileDto[3][0],
+				pointer: aliceProfileDto[3][1]
+			},
+			owner: aliceProfileDto[4],
+			anchor: aliceProfileDto[5]
 		}
 	})
 })
