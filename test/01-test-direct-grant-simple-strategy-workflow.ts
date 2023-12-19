@@ -109,6 +109,42 @@ describe('Allo Flow', async function () {
 			anchor: aliceProfileDto[5]
 		}
 	})
+
+	it('Clone strategy', async () => {
+		// Arrange
+		const { admin } = accounts
+		const { alloInstance, directGrantsSimpleStrategyContract } = contracts
+
+		let strategyAddress: string
+
+		// Act
+		const addToCloneableStrategiesTx =
+			await alloInstance.addToCloneableStrategies(
+				directGrantsSimpleStrategyContract
+			)
+
+		await addToCloneableStrategiesTx.wait()
+
+		const events = await alloInstance.queryFilter(
+			'StrategyApproved',
+			addToCloneableStrategiesTx.blockHash
+		)
+
+		const event = events[events.length - 1]
+
+		strategyAddress = event.args.strategy
+
+		// Assert
+		console.log('🏷️ Strategy cloned')
+		try {
+			assert.equal(
+				strategyAddress,
+				await directGrantsSimpleStrategyContract.getAddress()
+			)
+		} catch (error) {
+			console.log('🚨 Error: ', error)
+		}
+	})
 })
 
 async function deployContracts() {
