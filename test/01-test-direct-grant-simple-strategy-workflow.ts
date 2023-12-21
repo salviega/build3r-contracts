@@ -6,6 +6,7 @@ import {
 	BytesLike,
 	Contract,
 	ContractFactory,
+	RlpStructuredDataish,
 	ZeroAddress
 } from 'ethers'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
@@ -38,9 +39,34 @@ interface Profile {
 	anchor: string
 }
 
+interface Pool {
+	profileId: BytesLike
+	strategy: string
+	token: string
+	metadata: Metadata
+	managerRole: BytesLike
+	adminRole: BytesLike
+}
+
+interface InitializeData {
+	registryGating: boolean
+	metadataRequired: boolean
+	grantAmountRequired: boolean
+}
+
 describe('Allo Flow', async function () {
+	function toDecimal(value: number): bigint {
+		return BigInt(value * 10 ** 18)
+	}
+
 	let accounts: Accounts
 	let contracts: Contracts
+
+	const abiCoder = new ethers.AbiCoder()
+
+	const NATIVE = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
+
+	const initializeDataStructTypes: string[] = ['bool', 'bool', 'bool']
 
 	beforeEach(async function () {
 		const signers = await ethers.getSigners()
@@ -115,12 +141,15 @@ describe('Allo Flow', async function () {
 		const { admin } = accounts
 		const { alloInstance, directGrantsSimpleStrategyContract } = contracts
 
+		const directGrantsSimpleStrategyAddress: string =
+			await directGrantsSimpleStrategyContract.getAddress()
+
 		let strategyAddress: string
 
 		// Act
 		const addToCloneableStrategiesTx =
 			await alloInstance.addToCloneableStrategies(
-				directGrantsSimpleStrategyContract
+				directGrantsSimpleStrategyAddress
 			)
 
 		await addToCloneableStrategiesTx.wait()
@@ -135,12 +164,173 @@ describe('Allo Flow', async function () {
 		strategyAddress = event.args.strategy
 
 		// Assert
-		console.log('🏷️ Strategy cloned')
+		console.log('🏷️  Strategy cloned')
 		try {
-			assert.equal(
-				strategyAddress,
-				await directGrantsSimpleStrategyContract.getAddress()
+			assert.isTrue(
+				await alloInstance.isCloneableStrategy(
+					directGrantsSimpleStrategyAddress
+				)
 			)
+		} catch (error) {
+			console.log('🚨 Error: ', error)
+		}
+	})
+
+	it('Create pool', async () => {
+		// Arrange
+		const { admin, alice } = accounts
+		const {
+			registryInstance,
+			alloInstance,
+			directGrantsSimpleStrategyContract
+		} = contracts
+
+		const directGrantsSimpleStrategyAddress: string =
+			await directGrantsSimpleStrategyContract.getAddress()
+
+		const aliceNonce: number = await ethers.provider.getTransactionCount(
+			alice.address
+		)
+		const aliceName: string = 'alice'
+		const aliceMetadata: Metadata = {
+			protocol: BigInt(1),
+			pointer: 'ipfs://QmQmQmQmQmQmQmQmQmQmQmQmQm'
+		}
+		const aliceProfileMembers: string[] = []
+
+		const alicePoolMetadata: Metadata = {
+			protocol: BigInt(1),
+			pointer: 'ipfs://QmQmQmQmQmQmQmQmQmQmQmQmQm'
+		}
+
+		const alicePoolManagers: string[] = []
+
+		const alicePoolInitStrategyDataObject: InitializeData = {
+			registryGating: true,
+			metadataRequired: true,
+			grantAmountRequired: true
+		}
+
+		const aliceInitStrategyDataValues: boolean[] = [
+			alicePoolInitStrategyDataObject.registryGating,
+			alicePoolInitStrategyDataObject.metadataRequired,
+			alicePoolInitStrategyDataObject.grantAmountRequired
+		]
+
+		const aliceInitStrategyData: BytesLike = abiCoder.encode(
+			initializeDataStructTypes,
+			aliceInitStrategyDataValues
+		)
+
+		let poolFundingAmount: bigint = toDecimal(1)
+
+		let events: any
+		let event: any
+
+		let aliceProfileId: BytesLike
+		let aliceProfileDto: any
+		let aliceProfile: Profile
+
+		let strategyAddress: string
+
+		let alicePoolId: BytesLike
+		let alicePoolDto: any
+		let alicePool: Pool
+
+		// Act
+
+		// Create profile
+		console.log(' 🚩  1. Create profile')
+		const createProfileTx = await registryInstance.connect(alice).createProfile(
+			aliceNonce, // _nonce
+			aliceName, // _name
+			[aliceMetadata.protocol, aliceMetadata.pointer], // _metadata
+			alice.address, // ownerAddress
+			aliceProfileMembers // _membersAddresses
+		)
+
+		await createProfileTx.wait()
+
+		events = await registryInstance.queryFilter(
+			'ProfileCreated',
+			createProfileTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		aliceProfileId = event.args.profileId
+
+		aliceProfileDto = await registryInstance.getProfileById(aliceProfileId)
+
+		aliceProfile = {
+			id: aliceProfileDto[0],
+			nonce: aliceProfileDto[1],
+			name: aliceProfileDto[2],
+			metadata: {
+				protocol: aliceProfileDto[3][0],
+				pointer: aliceProfileDto[3][1]
+			},
+			owner: aliceProfileDto[4],
+			anchor: aliceProfileDto[5]
+		}
+
+		// Add strategy to cloneable strategies
+		console.log(' 🚩  2. Add strategy to cloneable strategies')
+		const addToCloneableStrategiesTx = await alloInstance
+			.connect(admin)
+			.addToCloneableStrategies(directGrantsSimpleStrategyAddress)
+
+		await addToCloneableStrategiesTx.wait()
+
+		events = await alloInstance.queryFilter(
+			'StrategyApproved',
+			addToCloneableStrategiesTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		strategyAddress = event.args.strategy
+
+		// Create pool
+		console.log(' 🚩  3. Create pool')
+		const createPoolTx = await alloInstance.connect(alice).createPool(
+			aliceProfileId, // _profileId
+			strategyAddress, // _strategy
+			aliceInitStrategyData, // _initStrategyData
+			NATIVE, //_token
+			poolFundingAmount, // _amount
+			[alicePoolMetadata.protocol, alicePoolMetadata.pointer], // _metadata
+			alicePoolManagers, // _managers
+			{ value: poolFundingAmount }
+		)
+
+		await createPoolTx.wait()
+
+		events = await alloInstance.queryFilter(
+			'PoolCreated',
+			createPoolTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		alicePoolId = event.args.poolId
+		alicePoolDto = await alloInstance.getPool(alicePoolId)
+		alicePool = {
+			profileId: alicePoolDto[0],
+			strategy: alicePoolDto[1],
+			token: alicePoolDto[2],
+			metadata: {
+				protocol: alicePoolDto[3][0],
+				pointer: alicePoolDto[3][1]
+			},
+			managerRole: alicePoolDto[4],
+			adminRole: alicePoolDto[5]
+		}
+
+		// Assert
+		console.log('🏷️  Pool created')
+		try {
+			assert.isTrue(aliceProfile.id === alicePool.profileId)
 		} catch (error) {
 			console.log('🚨 Error: ', error)
 		}
