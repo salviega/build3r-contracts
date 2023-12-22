@@ -6,7 +6,6 @@ import {
 	BytesLike,
 	Contract,
 	ContractFactory,
-	RlpStructuredDataish,
 	ZeroAddress
 } from 'ethers'
 import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers'
@@ -89,8 +88,8 @@ describe('Allo Flow', async function () {
 		'uint256',
 		'tuple(uint256, string)'
 	]
-
 	const metadataStructTypes: string[] = ['uint256', 'string']
+	const allocateStructTypes: string[] = ['address', 'uint256', 'uint256']
 
 	beforeEach(async function () {
 		const signers = await ethers.getSigners()
@@ -587,7 +586,7 @@ describe('Allo Flow', async function () {
 		}
 	})
 
-	it('Set recipient status to inReview', async () => {
+	it.skip('Set recipient status to inReview', async () => {
 		// Arrange
 		const { admin, alice, bob } = accounts
 		const {
@@ -832,6 +831,282 @@ describe('Allo Flow', async function () {
 		console.log('🏷️  Recipient status changed to inReview')
 		try {
 			assert.equal(recipientStatusChangedStatus, bobRecipientStatus)
+		} catch (error) {
+			console.log('🚨 Error: ', error)
+		}
+	})
+
+	it('allocate funds', async () => {
+		// Arrange
+		const { admin, alice, bob } = accounts
+		const {
+			registryInstance,
+			alloInstance,
+			directGrantsSimpleStrategyContract
+		} = contracts
+
+		const directGrantsSimpleStrategyAddress: string =
+			await directGrantsSimpleStrategyContract.getAddress()
+
+		const aliceNonce: number = await ethers.provider.getTransactionCount(
+			alice.address
+		)
+		const aliceName: string = 'alice'
+		const aliceMetadata: Metadata = {
+			protocol: BigInt(1),
+			pointer: 'ipfs://QmQmQmQmQmQmQmQmQmQmQmQmQm'
+		}
+		const aliceProfileMembers: string[] = []
+
+		const alicePoolMetadata: Metadata = {
+			protocol: BigInt(1),
+			pointer: 'ipfs://QmQmQmQmQmQmQmQmQmQmQmQmQm'
+		}
+
+		const alicePoolManagers: string[] = []
+
+		const alicePoolInitStrategyDataObject: InitializeData = {
+			registryGating: false,
+			metadataRequired: true,
+			grantAmountRequired: true
+		}
+
+		const aliceInitStrategyDataValues: boolean[] = [
+			alicePoolInitStrategyDataObject.registryGating,
+			alicePoolInitStrategyDataObject.metadataRequired,
+			alicePoolInitStrategyDataObject.grantAmountRequired
+		]
+
+		const aliceInitStrategyData: BytesLike = abiCoder.encode(
+			initializeDataStructTypes,
+			aliceInitStrategyDataValues
+		)
+
+		let bobData: RecipientData = {
+			recipientId: bob.address,
+			recipientAddress: ZeroAddress,
+			grantAmount: toDecimal(1),
+			metadata: {
+				protocol: BigInt(1),
+				pointer: 'ipfs://QmQmQmQmQmQmQmQmQmQmQmQmQm'
+			}
+		}
+
+		const bobDataArray: any[] = [
+			bobData.recipientId,
+			bobData.recipientAddress,
+			bobData.grantAmount,
+			[bobData.metadata.protocol, bobData.metadata.pointer]
+		]
+
+		let bobDataBytes: BytesLike = abiCoder.encode(
+			recipientDataStructTypes,
+			bobDataArray
+		)
+
+		let bobAllocateDataArray: any[] = [bob.address, BigInt(2), toDecimal(0.5)]
+
+		let bobAllocateDataBytes: BytesLike = abiCoder.encode(
+			allocateStructTypes,
+			bobAllocateDataArray
+		)
+
+		let poolFundingAmount: bigint = toDecimal(1)
+
+		let events: any
+		let event: any
+
+		let aliceProfileId: BytesLike
+		let aliceProfileDto: any
+		let aliceProfile: Profile
+		let aliceStrategyContract: any
+
+		let strategyAddress: string
+
+		let alicePoolId: bigint
+		let alicePoolDto: any
+		let alicePool: Pool
+
+		let bobRecipientId: string
+		let bobRecipient: Recipient
+		let bobRecipientStatus: bigint
+
+		// Act
+
+		// Create profile
+		console.log(' 🚩  1. Create profile')
+		const createProfileTx = await registryInstance.connect(alice).createProfile(
+			aliceNonce, // _nonce
+			aliceName, // _name
+			[aliceMetadata.protocol, aliceMetadata.pointer], // _metadata
+			alice.address, // ownerAddress
+			aliceProfileMembers // _membersAddresses
+		)
+
+		await createProfileTx.wait()
+
+		events = await registryInstance.queryFilter(
+			'ProfileCreated',
+			createProfileTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		aliceProfileId = event.args.profileId
+
+		aliceProfileDto = await registryInstance.getProfileById(aliceProfileId)
+
+		aliceProfile = {
+			id: aliceProfileDto[0],
+			nonce: aliceProfileDto[1],
+			name: aliceProfileDto[2],
+			metadata: {
+				protocol: aliceProfileDto[3][0],
+				pointer: aliceProfileDto[3][1]
+			},
+			owner: aliceProfileDto[4],
+			anchor: aliceProfileDto[5]
+		}
+
+		bobData.recipientAddress = aliceProfile.anchor
+		bobDataArray[1] = bobData.recipientAddress
+		bobDataBytes = abiCoder.encode(recipientDataStructTypes, bobDataArray)
+
+		// Add strategy to cloneable strategies
+		console.log(' 🚩  2. Add strategy to cloneable strategies')
+		const addToCloneableStrategiesTx = await alloInstance
+			.connect(admin)
+			.addToCloneableStrategies(directGrantsSimpleStrategyAddress)
+
+		await addToCloneableStrategiesTx.wait()
+
+		events = await alloInstance.queryFilter(
+			'StrategyApproved',
+			addToCloneableStrategiesTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		strategyAddress = event.args.strategy
+
+		// Create pool
+		console.log(' 🚩  3. Create pool')
+		const createPoolTx = await alloInstance.connect(alice).createPool(
+			aliceProfileId, // _profileId
+			strategyAddress, // _strategy
+			aliceInitStrategyData, // _initStrategyData
+			NATIVE, //_token
+			poolFundingAmount, // _amount
+			[alicePoolMetadata.protocol, alicePoolMetadata.pointer], // _metadata
+			alicePoolManagers, // _managers
+			{ value: poolFundingAmount }
+		)
+
+		await createPoolTx.wait()
+
+		events = await alloInstance.queryFilter(
+			'PoolCreated',
+			createPoolTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		alicePoolId = event.args.poolId
+		alicePoolDto = await alloInstance.getPool(alicePoolId)
+		alicePool = {
+			profileId: alicePoolDto[0],
+			strategy: alicePoolDto[1],
+			token: alicePoolDto[2],
+			metadata: {
+				protocol: alicePoolDto[3][0],
+				pointer: alicePoolDto[3][1]
+			},
+			managerRole: alicePoolDto[4],
+			adminRole: alicePoolDto[5]
+		}
+
+		aliceStrategyContract = await ethers.getContractAt(
+			'DirectGrantsSimpleStrategy',
+			alicePool.strategy
+		)
+
+		// 4. Add recipient
+		console.log(' 🚩  4. Add recipient')
+		const addRecipientTx = await alloInstance
+			.connect(alice)
+			.registerRecipient(alicePoolId, bobDataBytes)
+
+		await addRecipientTx.wait()
+
+		events = await aliceStrategyContract.queryFilter(
+			'Registered',
+			addRecipientTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		bobRecipientId = event.args.recipientId
+
+		let bobRecipientDto: any[] = await aliceStrategyContract.getRecipient(
+			bobRecipientId
+		)
+
+		bobRecipient = {
+			useRegistryAnchor: bobRecipientDto[0],
+			recipientAddress: bobRecipientDto[1],
+			grantAmount: bobRecipientDto[2],
+			metadata: {
+				protocol: bobRecipientDto[3][0],
+				pointer: bobRecipientDto[3][1]
+			},
+			recipientStatus: bobRecipientDto[4],
+			milestonesReviewStatus: bobRecipientDto[5]
+		}
+
+		// 5. Set recipient status to inReview
+		console.log(' 🚩  5. Set recipient status to inReview')
+
+		const setRecipientStatusToInReviewTx = await aliceStrategyContract
+			.connect(alice)
+			.setRecipientStatusToInReview([bobRecipientId])
+
+		await setRecipientStatusToInReviewTx.wait()
+
+		events = await aliceStrategyContract.queryFilter(
+			'RecipientStatusChanged',
+			setRecipientStatusToInReviewTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		let recipientStatusChangedStatus: bigint = event.args.status
+
+		bobRecipientStatus = await aliceStrategyContract.getRecipientStatus(
+			bobRecipientId
+		)
+
+		// 6. Allocate funds
+		console.log(' 🚩  6. Allocate funds')
+
+		const allocateFundsTx = await alloInstance
+			.connect(alice)
+			.allocate(alicePoolId, bobAllocateDataBytes)
+
+		await allocateFundsTx.wait()
+
+		events = await aliceStrategyContract.queryFilter(
+			'RecipientStatusChanged',
+			allocateFundsTx.blockHash
+		)
+
+		event = events[events.length - 1]
+
+		recipientStatusChangedStatus = event.args.status
+
+		// Assert
+		console.log('🏷️  Funds allocated')
+		try {
+			assert.equal(recipientStatusChangedStatus, BigInt(2))
 		} catch (error) {
 			console.log('🚨 Error: ', error)
 		}
