@@ -1213,6 +1213,9 @@ describe('Allo Flow', async function () {
 
 		let poolFundingAmount: bigint = toDecimal(1)
 
+		let transactionReceipt: any
+		let transactionBlockNumber: any
+
 		let events: any
 		let event: any
 
@@ -1245,9 +1248,14 @@ describe('Allo Flow', async function () {
 
 		await createProfileTx.wait()
 
+		transactionReceipt = await ethers.provider.getTransactionReceipt(
+			createProfileTx.hash
+		)
+		transactionBlockNumber = transactionReceipt.blockNumber
+
 		events = await registryInstance.queryFilter(
 			'ProfileCreated',
-			createProfileTx.blockHash
+			transactionBlockNumber
 		)
 
 		event = events[events.length - 1]
@@ -1280,9 +1288,14 @@ describe('Allo Flow', async function () {
 
 		await addToCloneableStrategiesTx.wait()
 
+		transactionReceipt = await ethers.provider.getTransactionReceipt(
+			addToCloneableStrategiesTx.hash
+		)
+		transactionBlockNumber = transactionReceipt.blockNumber
+
 		events = await alloInstance.queryFilter(
 			'StrategyApproved',
-			addToCloneableStrategiesTx.blockHash
+			transactionBlockNumber
 		)
 
 		event = events[events.length - 1]
@@ -1304,9 +1317,14 @@ describe('Allo Flow', async function () {
 
 		await createPoolTx.wait()
 
+		transactionReceipt = await ethers.provider.getTransactionReceipt(
+			createPoolTx.hash
+		)
+		transactionBlockNumber = transactionReceipt.blockNumber
+
 		events = await alloInstance.queryFilter(
 			'PoolCreated',
-			createPoolTx.blockHash
+			transactionBlockNumber
 		)
 
 		event = events[events.length - 1]
@@ -1338,9 +1356,14 @@ describe('Allo Flow', async function () {
 
 		await addRecipientTx.wait()
 
+		transactionReceipt = await ethers.provider.getTransactionReceipt(
+			addRecipientTx.hash
+		)
+		transactionBlockNumber = transactionReceipt.blockNumber
+
 		events = await aliceStrategyContract.queryFilter(
 			'Registered',
-			addRecipientTx.blockHash
+			transactionBlockNumber
 		)
 
 		event = events[events.length - 1]
@@ -1372,9 +1395,14 @@ describe('Allo Flow', async function () {
 
 		await setRecipientStatusToInReviewTx.wait()
 
+		transactionReceipt = await ethers.provider.getTransactionReceipt(
+			setRecipientStatusToInReviewTx.hash
+		)
+		transactionBlockNumber = transactionReceipt.blockNumber
+
 		events = await aliceStrategyContract.queryFilter(
 			'RecipientStatusChanged',
-			setRecipientStatusToInReviewTx.blockHash
+			transactionBlockNumber
 		)
 
 		event = events[events.length - 1]
@@ -1394,9 +1422,14 @@ describe('Allo Flow', async function () {
 
 		await allocateFundsTx.wait()
 
+		transactionReceipt = await ethers.provider.getTransactionReceipt(
+			setRecipientStatusToInReviewTx.hash
+		)
+		transactionBlockNumber = transactionReceipt.blockNumber
+
 		events = await aliceStrategyContract.queryFilter(
 			'RecipientStatusChanged',
-			allocateFundsTx.blockHash
+			transactionBlockNumber
 		)
 
 		event = events[events.length - 1]
@@ -1423,9 +1456,14 @@ describe('Allo Flow', async function () {
 
 		await setMilestoneTx.wait()
 
+		transactionReceipt = await ethers.provider.getTransactionReceipt(
+			setMilestoneTx.hash
+		)
+		transactionBlockNumber = transactionReceipt.blockNumber
+
 		events = await aliceStrategyContract.queryFilter(
 			'MilestonesSet',
-			setMilestoneTx.blockHash
+			transactionBlockNumber
 		)
 
 		event = events[events.length - 1]
