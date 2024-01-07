@@ -598,8 +598,7 @@ contract DirectGrantsSimpleStrategy is BaseStrategy, ReentrancyGuard {
 		}
 
 		// Calculate the amount to be distributed for the milestone
-		uint256 amount = (recipient.grantAmount * milestone.amountPercentage) /
-			1e18;
+		uint256 amount = (recipient.grantAmount * milestone.amountPercentage) / 1e9;
 
 		// Get the pool, subtract the amount and transfer to the recipient
 		IAllo.Pool memory pool = allo.getPool(poolId);
@@ -690,7 +689,7 @@ contract DirectGrantsSimpleStrategy is BaseStrategy, ReentrancyGuard {
 			}
 		}
 
-		if (totalAmountPercentage != 1e18) {
+		if (totalAmountPercentage != 1e9) {
 			revert INVALID_MILESTONE();
 		}
 

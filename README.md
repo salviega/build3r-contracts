@@ -1,4 +1,4 @@
-# Naturelink Allo hackathon - contracts
+# Build3r - contracts
 
 Allo on Arbitrum hackathon
 
@@ -9,7 +9,7 @@ Prerequisites: [Node (v20 LTS)](https://nodejs.org/en/download/) and [Git](https
 > Clone the repository:
 
 ```
-git clone https://github.com/salviega/naturelink-allo-hackathon-contracts.git
+git clone https://github.com/salviega/build3r-contracts.git
 ```
 
 > Install dependencies:
